@@ -3,6 +3,12 @@ import math
 import random
 import copy
 
+#明天增加功能：
+#1、通过左右方向键选择僵尸
+#2、通过上下方向键选择步数僵尸的位置（加入darkMage）
+
+
+
 class Plant:
     def __init__(self, row, col, plantType):
         self.row = row
@@ -26,7 +32,7 @@ class Zombie:
         self.row = row
         self.type = zombieType
         self.state = 'walking'
-        
+
         if zombieType == 'zombie':
             self.health = 100
             self.speed = 0.5
@@ -41,6 +47,15 @@ class Zombie:
 
     def isAlive(self):
         return self.health > 0
+
+class Lawnmower:
+    def __init__(self, app, row):
+        self.x = app.boardLeft - 40
+        self.y = app.boardTop + row * app.cellHeight + app.cellHeight // 2
+        self.row = row
+        self.active = True
+        self.moving = False
+        self.imageIndex = 0
 
 def onAppStart(app):
     app.mode = 'menu'
@@ -91,8 +106,9 @@ def onAppStart(app):
     app.paused = False
     app.gameOver = False
     app.showGrid = False
-
-
+    app.showHealthBars = False
+    app.lawnmowerImages = [f'lawnmover/lawnmover_{i:02d}.png' for i in range(8)]
+    app.lawnmowers = [Lawnmower(app, r) for r in range(app.rows)]
 
 def redrawAll(app):
     if app.mode == 'menu':
@@ -103,12 +119,13 @@ def redrawAll(app):
     drawImage("garden.jpg", 0, 0)
     drawLabel('Zombies vs Plants', app.width//2, 40, size=40, fill='darkgreen', bold=True)
     drawZombieSelector(app)
-    informationY = 580
-    drawLabel(f'Zombie Points: {app.zombiePoints}', app.width//2, informationY, size=20, fill='black',bold=True)
+    drawLabel(f'Zombie Points: {app.zombiePoints}', app.width//2, 580, size=20, fill='black',bold=True)
     drawBoard(app)
+    drawLawnmowers(app)
     drawPlants(app)
     drawBullets(app)
     drawZombies(app)
+
     if app.gameOver:
         drawRect(0, 0, app.width, app.height, fill='white', opacity=80)
         drawLabel('You Win!', app.width//2, app.height//2-30, size=40, bold=True, fill='green')
@@ -117,7 +134,7 @@ def redrawAll(app):
     elif app.paused:
         drawRect(0,0,app.width,app.height,fill = "black",opacity = 60)
         drawLabel('Paused', app.width//2, app.height//2, size=50, fill='white', bold=True)
-
+    
 def drawZombieSelector(app):
     selectorWidth = 300
     selectorHeight = 100
@@ -125,15 +142,18 @@ def drawZombieSelector(app):
     selectorTop = 549
     drawRect(selectorLeft, selectorTop, selectorWidth, selectorHeight, fill='brown', border='black', borderWidth=2, opacity=75)
     zombies = app.zombieTypes
+
     for i in range(len(zombies)):
         ztype = zombies[i]
         x = selectorLeft + 50 + i * 120
         y = selectorTop + 20
         color = 'yellow' if app.zombieType == ztype else None
+
         if ztype == 'zombie':
             img = app.zombieWalkingImages[0]
         else:
             img = app.giantZombieWalkingImages[0]
+
         drawImage(img, x + 15, y + 15, align='center', width=50, height=50)
         drawRect(x - 5, y - 5, 50, 50, border=color, borderWidth=3, fill=None)
         drawLabel(ztype, x + 15, y + 65, size=14, fill='black')
@@ -159,12 +179,14 @@ def drawPlants(app):
                 imageIndex = app.plantImageIndex[plantType]
                 imageUrl = app.plantImages[plantType][imageIndex]
                 drawImage(imageUrl, x, y, align='center', width=app.cellWidth, height=app.cellHeight)
+                if app.showHealthBars:
+                    healthPercent = plant.health / plant.maxHealth
+                    drawRect(x - 30, y - 40, 60 * healthPercent, 7, fill='red')
+                    drawRect(x - 30, y - 40, 60, 7, fill=None, border='black')
 
 def drawBullets(app):
     for bullet in app.bullets:
         drawImage('pea.webp', bullet['x'], bullet['y'], align='center', width=20, height=20)
-
-
 
 def drawZombies(app):
     for zombie in app.zombies:
@@ -188,6 +210,16 @@ def drawZombies(app):
                 imageIndex = app.zombieImageIndex['zombie']['eating']
                 image = app.zombieEatingImages[imageIndex]
                 drawImage(image, x, y, align='center', width=app.cellWidth, height=app.cellHeight)
+        if app.showHealthBars:
+            healthPercent = zombie.health / zombie.maxHealth
+            drawRect(x - 25, y - 55, 50 * healthPercent, 7, fill='red')
+            drawRect(x - 25, y - 55, 50, 7, fill=None, border='black')
+
+def drawLawnmowers(app):
+    for mower in app.lawnmowers:
+        if mower.active:
+            imageUrl = app.lawnmowerImages[mower.imageIndex]
+            drawImage(imageUrl, mower.x, mower.y, align='center', width=50, height=40)
 
 def onMousePress(app, x, y):
     if app.mode == 'menu':
@@ -227,13 +259,12 @@ def onKeyPress(app, key):
     if key == 'r' or key == 'R':
         app.mode = 'menu'
         resetGame(app)
-        return
-    if app.gameOver:
-        return
-    if key == 'p':
+    if key == 'p' or key == 'P':
         app.paused = not app.paused
     if key == 's' or key == 'S':
         app.showGrid = not app.showGrid
+    if key == 'h' or key == 'H':
+        app.showHealthBars = not app.showHealthBars
 
 def spawnPlant(app):
     empty = [(r, c) for r in range(app.rows) for c in range(app.cols) if app.board[r][c] is None]
@@ -297,11 +328,23 @@ def updateGame(app):
         bullet['x'] += 4
         if bullet['x'] > app.boardLeft + app.boardWidth + 60:
             app.bullets.remove(bullet)
-    
     for zombie in app.zombies[:]:
         zombie.x -= zombie.speed
         if zombie.x < app.boardLeft - 60:
             app.gameOver = True
+    for mower in app.lawnmowers:
+        if mower.moving and mower.active:
+            mower.x += 5
+            mower.imageIndex = (mower.imageIndex + 1) % len(app.lawnmowerImages)
+            app.zombies = [z for z in app.zombies if z.row != mower.row or z.x > mower.x + 30]
+            app.plants = [p for p in app.plants if p.row != mower.row or p.col < (mower.x - app.boardLeft) // app.cellWidth]
+            if mower.x > app.boardLeft + app.boardWidth:
+                mower.active = False
+        else:
+            for z in app.zombies:
+                if z.row == mower.row and z.x < app.boardLeft + 10:
+                    mower.moving = True
+                    break
 
 def checkCollisions(app):
     for bullet in app.bullets[:]:
@@ -353,7 +396,7 @@ def plantAttack(app):
                             'y': bulletY,
                             'row': row,
                             'damage': 25
-                        })
+                    })
                         break
 
 def checkGameState(app):
@@ -382,6 +425,16 @@ def resetGame(app):
         'zombie': {'walking': 0, 'eating': 0},
         'giantZombie': {'walking': 0, 'eating': 0}
     }
+    app.showHealthBars = False
+    app.lawnmowers = [Lawnmower(app, r) for r in range(app.rows)]
+
+
+
+
+
+
+
+
 
 def main():
     runApp(width=900, height=650)
