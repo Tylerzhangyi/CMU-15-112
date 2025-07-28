@@ -3,9 +3,24 @@ import math
 import random
 import copy
 
-#明天增加功能：
-#1、通过左右方向键选择僵尸
-#2、通过上下方向键选择步数僵尸的位置（加入darkMage）
+
+
+
+class darkMage:
+    def __init__(self):
+        self.power = 100
+        self.x = 800
+        self.y = 145 + 71 // 2
+        self.targetY = self.y
+        self.row = 0
+        self.images = [f'darkMage/frame_{i}_delay-0.09s.png' for i in range(5)]
+        self.summonImages = [f'summon/frame_{i:02d}_delay-0.1s.png' for i in range(28)]
+        self.index = 0
+        self.timer = 0
+        self.speed = 5
+        self.moveSpeed = 3
+        self.summoning = False
+        self.summonTimer = 0
 
 
 
@@ -109,6 +124,7 @@ def onAppStart(app):
     app.showHealthBars = False
     app.lawnmowerImages = [f'lawnmover/lawnmover_{i:02d}.png' for i in range(8)]
     app.lawnmowers = [Lawnmower(app, r) for r in range(app.rows)]
+    app.darkMage = darkMage()
 
 def redrawAll(app):
     if app.mode == 'menu':
@@ -120,12 +136,23 @@ def redrawAll(app):
     drawLabel('Zombies vs Plants', app.width//2, 40, size=40, fill='darkgreen', bold=True)
     drawZombieSelector(app)
     drawLabel(f'Zombie Points: {app.zombiePoints}', app.width//2, 580, size=20, fill='black',bold=True)
+  
     drawBoard(app)
     drawLawnmowers(app)
     drawPlants(app)
     drawBullets(app)
     drawZombies(app)
-
+    
+    if app.darkMage.summoning:
+        summonFrame = (app.darkMage.summonTimer * len(app.darkMage.summonImages)) // 60
+        if summonFrame >= len(app.darkMage.summonImages):
+            app.darkMage.summoning = False
+            app.darkMage.summonTimer = 0
+        else:
+            drawImage(app.darkMage.summonImages[summonFrame], app.darkMage.x, app.darkMage.y, align='center', width=100, height=100)
+    else:
+        drawImage(app.darkMage.images[app.darkMage.index], app.darkMage.x, app.darkMage.y, align='center', width=80, height=80)
+    
     if app.gameOver:
         drawRect(0, 0, app.width, app.height, fill='white', opacity=80)
         drawLabel('You Win!', app.width//2, app.height//2-30, size=40, bold=True, fill='green')
@@ -186,7 +213,7 @@ def drawPlants(app):
 
 def drawBullets(app):
     for bullet in app.bullets:
-        drawImage('pea.webp', bullet['x'], bullet['y'], align='center', width=20, height=20)
+        drawImage('resource/pea.webp', bullet['x'], bullet['y'], align='center', width=20, height=20)
 
 def drawZombies(app):
     for zombie in app.zombies:
@@ -241,6 +268,18 @@ def onMousePress(app, x, y):
         return
     if app.paused:
         return
+    
+    darkMageX = app.darkMage.x
+    darkMageY = app.darkMage.y
+    if abs(x - darkMageX) < 40 and abs(y - darkMageY) < 40:
+        ztype = app.zombieType
+        zcost = app.zombieCostDict.get(ztype, 50)
+        if app.zombiePoints >= zcost:
+            zombie = Zombie(darkMageX, darkMageY, app.darkMage.row, ztype)
+            app.zombies.append(zombie)
+            app.zombiePoints -= zcost
+        return
+    
     rightColX = app.boardLeft + app.boardWidth
     if x > rightColX and app.boardTop <= y < app.boardTop + app.boardHeight:
         row = int((y - app.boardTop) // app.cellHeight)
@@ -265,6 +304,29 @@ def onKeyPress(app, key):
         app.showGrid = not app.showGrid
     if key == 'h' or key == 'H':
         app.showHealthBars = not app.showHealthBars
+    if key == 'left':
+        currentIndex = app.zombieTypes.index(app.zombieType)
+        app.zombieType = app.zombieTypes[(currentIndex - 1) % len(app.zombieTypes)]
+    elif key == 'right':
+        currentIndex = app.zombieTypes.index(app.zombieType)
+        app.zombieType = app.zombieTypes[(currentIndex + 1) % len(app.zombieTypes)]
+    elif key == 'up':
+        app.darkMage.targetY -= app.cellHeight
+        if app.darkMage.targetY < app.boardTop + app.cellHeight // 2:
+            app.darkMage.targetY = app.boardTop + app.cellHeight // 2
+    elif key == 'down':
+        app.darkMage.targetY += app.cellHeight
+        if app.darkMage.targetY > app.boardTop + app.boardHeight - app.cellHeight // 2:
+            app.darkMage.targetY = app.boardTop + app.boardHeight - app.cellHeight // 2
+    elif key == 'enter':
+        ztype = app.zombieType
+        zcost = app.zombieCostDict.get(ztype, 50)
+        if app.zombiePoints >= zcost:
+            app.darkMage.summoning = True
+            app.darkMage.summonTimer = 0
+            zombie = Zombie(app.darkMage.x, app.darkMage.y, app.darkMage.row, ztype)
+            app.zombies.append(zombie)
+            app.zombiePoints -= zcost
 
 def spawnPlant(app):
     empty = [(r, c) for r in range(app.rows) for c in range(app.cols) if app.board[r][c] is None]
@@ -300,6 +362,28 @@ def spawnPlant(app):
 def onStep(app):
     if app.paused or app.mode == 'menu':
         return
+    
+    app.darkMage.timer += 1
+    if app.darkMage.timer >= app.darkMage.speed:
+        app.darkMage.timer = 0
+        if not app.darkMage.summoning:
+            app.darkMage.index = (app.darkMage.index + 1) % len(app.darkMage.images)
+    
+    if app.darkMage.summoning:
+        app.darkMage.summonTimer += 1
+    
+    if abs(app.darkMage.y - app.darkMage.targetY) > 1:
+        if app.darkMage.y < app.darkMage.targetY:
+            app.darkMage.y += app.darkMage.moveSpeed
+        elif app.darkMage.y > app.darkMage.targetY:
+            app.darkMage.y -= app.darkMage.moveSpeed
+    
+    app.darkMage.row = int((app.darkMage.y - app.boardTop) // app.cellHeight)
+    if app.darkMage.row < 0:
+        app.darkMage.row = 0
+    elif app.darkMage.row >= app.rows:
+        app.darkMage.row = app.rows - 1
+
     app.zombiePointTimer += 1
     if app.zombiePointTimer >= app.zombiePointRate:
         app.zombiePointTimer = 0
@@ -337,7 +421,6 @@ def updateGame(app):
             mower.x += 5
             mower.imageIndex = (mower.imageIndex + 1) % len(app.lawnmowerImages)
             app.zombies = [z for z in app.zombies if z.row != mower.row or z.x > mower.x + 30]
-            app.plants = [p for p in app.plants if p.row != mower.row or p.col < (mower.x - app.boardLeft) // app.cellWidth]
             if mower.x > app.boardLeft + app.boardWidth:
                 mower.active = False
         else:
@@ -427,6 +510,7 @@ def resetGame(app):
     }
     app.showHealthBars = False
     app.lawnmowers = [Lawnmower(app, r) for r in range(app.rows)]
+    app.darkMage = darkMage()
 
 
 
