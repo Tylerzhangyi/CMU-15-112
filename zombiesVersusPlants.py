@@ -110,6 +110,7 @@ def onAppStart(app):
     app.plantRate = 60
     app.plantCount = 0
     app.plantSpawnNum = 120
+    #Let AI to help me to solve the problem that the plant images are not showing correctly(change from i to i:02d)
     app.plantImages = {
         'sunflower': [f'sunFlower/sunFlower_{i:02d}.png' for i in range(36)],
         'peashooter': [f'peaShooter/peaShooter_{i:02d}.png' for i in range(77)],
@@ -124,6 +125,7 @@ def onAppStart(app):
         'repeater': 0,
         'snowPeaShooter': 0
     }
+    #Let AI to help me to solve the problem that the zombie images are not showing correctly(change from i to i:02d)
     app.zombieWalkImages = [f'zombieWalking/zombieWalking_{i:02d}.png' for i in range(46)]
     app.zombieEatImages = [f'zombieEating/zombieEating_{i:02d}.png' for i in range(40)]
     app.giantWalkImages = [f'giantZombieWalking/giantZombie_{i:03d}.png' for i in range(161)]
@@ -442,6 +444,8 @@ def onStep(app):
             app.mage.index = (app.mage.index + 1) % len(app.mage.images)
     if app.mage.summoning:
         app.mage.summonTimer +=  1
+    #Let GPT to help me solve to problem that the dark mage would keep moving up and down when it is in the col 1,2,3
+    #It told me to add a 2 pixels of tolerance to avoid minor jitter
     if app.mage.y < app.mage.targetY - 2:
         app.mage.y +=  app.mage.moveSpeed
     elif app.mage.y > app.mage.targetY + 2:
