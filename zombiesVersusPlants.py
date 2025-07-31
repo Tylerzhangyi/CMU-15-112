@@ -40,6 +40,8 @@ class Plant:
             self.health = 100
         elif type == 'snowPeaShooter':
             self.health = 100
+        elif type == 'potato':
+            self.health = 999999
         else:
             self.health = 300
         self.maxHealth = self.health
@@ -99,7 +101,6 @@ def onAppStart(app):
     app.boardWidth = app.cols * app.cellWidth
     app.boardHeight = app.rows * app.cellHeight
     app.board = [[None] * app.cols for _ in range(app.rows)]
-    app.plants = ['sunflower', 'peashooter', 'wallnut']
     app.zombies = []
     app.zombieTypes = ['zombie', 'giantZombie', 'doorZombie']
     app.zombieType = 'zombie'
@@ -117,13 +118,15 @@ def onAppStart(app):
         'wallnut': [f'wallNut/wallNut_{i:02d}.png' for i in range(44)],
         'repeater': [f'repeater/frame_{i:02d}_delay-0.03s.png' for i in range(49)],
         'snowPeaShooter': [f'snowPeaShooter/frame_{i:02d}_delay-0.07s.png' for i in range(25)],
+        'potato': [f'potato/frame_{i:02d}_delay-0.03s.png' for i in range(29)],
     }
     app.plantIndex = {
         'sunflower': 0,
         'peashooter': 0,
         'wallnut': 0,
         'repeater': 0,
-        'snowPeaShooter': 0
+        'snowPeaShooter': 0,
+        'potato': 0
     }
     #Let AI to help me to solve the problem that the zombie images are not showing correctly(change from i to i:02d)
     app.zombieWalkImages = [f'zombieWalking/zombieWalking_{i:02d}.png' for i in range(46)]
@@ -143,6 +146,8 @@ def onAppStart(app):
     app.mowerImages = [f'lawnmover/lawnmover_{i:02d}.png' for i in range(8)]
     app.mowers = [Mower(app, r) for r in range(app.rows)]
     app.mage = Mage()
+    app.commandMode = False
+    app.commandString = ""
 
 def drawMenu(app):
     drawImage('menu.jpg', 0, 0, width = app.width, height = app.height)
@@ -152,29 +157,30 @@ def drawMenu(app):
     drawLabel('Instruction', 450, 520, size = 36, fill = 'white', bold = True)
 
 def drawInstruction(app):
-    drawRect(0, 0, app.width, app.height, fill = 'white')
+    x = 200
+    drawRect(0, 0, app.width, app.height, fill = 'moccasin')
     drawRect(350, 565, 200, 70, fill = 'brown', border = 'black', borderWidth = 6)
+    drawLabel('Instruction', 450, x - 100, size = 66, fill = 'black', bold = True)
     drawLabel('Back', 450, 600, size = 36, fill = 'white', bold = True)
-    drawLabel('Use ← and → to select a zombie', app.width // 2, 100, size = 20, fill = 'black', bold = True)
-    drawLabel('Use ↑ and ↓ to move the dark mage', app.width // 2, 140, size = 20, fill = 'black', bold = True)
-    drawLabel('Press Enter to summon a zombie', app.width // 2, 180, size = 20, fill = 'black', bold = True)
-    drawLabel('Press P to pause the game', app.width // 2, 220, size = 20, fill = 'black', bold = True)
-    drawLabel('Press S to show the grid', app.width // 2, 260, size = 20, fill = 'black', bold = True)
-    drawLabel('Press H to show the health bars', app.width // 2, 300, size = 20, fill = 'black', bold = True)
-    drawLabel('Press R to restart the game', app.width // 2, 340, size = 20, fill = 'black', bold = True)
+    drawLabel('Use ← and → to select a zombie', app.width // 2, x, size = 20, fill = 'black', bold = True)
+    drawLabel('Use ↑ and ↓ to move the dark mage', app.width // 2, x + 40, size = 20, fill = 'black', bold = True)
+    drawLabel('Press Enter to summon a zombie', app.width // 2, x + 80, size = 20, fill = 'black', bold = True)
+    drawLabel('Press P to pause the game', app.width // 2, x + 120, size = 20, fill = 'black', bold = True)
+    drawLabel('Press S to show the grid', app.width // 2, x + 160, size = 20, fill = 'black', bold = True)
+    drawLabel('Press H to show the health bars', app.width // 2, x + 200, size = 20, fill = 'black', bold = True)
+    drawLabel('Press R to restart the game', app.width // 2, x + 240, size = 20, fill = 'black', bold = True)
+    drawLabel('Press / to enter command mode', app.width // 2, x + 280, size = 20, fill = 'black', bold = True)
 
 def drawGame(app):
     drawImage("garden.jpg", 0, 0)
-    #drawLabel('Zombies vs Plants', app.width//2, 40, size = 40, fill = 'darkgreen', bold = True)
     drawZombieSelector(app)
     drawLabel(f'Zombie Points: {app.zombiePoints}', app.width // 2 + 100, 580, size = 20, fill = 'black', bold = True)
-  
     drawBoard(app)
     drawMowers(app)
     drawPlants(app)
     drawBullets(app)
     drawZombies(app)
-    
+    #I let AI to help me finish the summoning animation in one second
     if app.mage.summoning:
         summonFrame = (app.mage.summonTimer * len(app.mage.summonImages)) // 60
         if summonFrame >= len(app.mage.summonImages):
@@ -185,18 +191,21 @@ def drawGame(app):
     else:
         drawImage(app.mage.images[app.mage.index], app.mage.x, app.mage.y, align = 'center', width = 80, height = 80)
     
+    if app.commandMode:
+        drawRect(430,600, app.width, app.height, fill='black', opacity=50)
+        drawLabel('/' + app.commandString, 450, 620, size=16, fill='white', align='left-top')
+
     if app.gameOver:
         drawRect(0, 0, app.width, app.height, fill = 'white', opacity = 80)
         if app.gameWon:
             drawLabel('You Win!', app.width // 2, app.height // 2 - 30, size = 40, bold = True, fill = 'green')
         else:
             drawLabel('You Lose!', app.width // 2, app.height // 2 - 30, size = 40, bold = True, fill = 'red')
-
         drawLabel('Press R to Restart', app.width // 2, app.height // 2 + 50, size = 20, fill = 'black')
     elif app.paused:
         drawRect(0, 0, app.width, app.height, fill = "black", opacity = 60)
         drawLabel('Paused', app.width // 2, app.height // 2, size = 50, fill = 'white', bold = True)
- 
+
 def redrawAll(app):
     if app.mode == 'menu':
         drawMenu(app)
@@ -316,14 +325,11 @@ def onMousePressGame(app, x, y):
     selectorHeight = 120
     selectorLeft = 0
     selectorTop = 549
-    if selectorLeft <= x <= selectorLeft + selectorWidth and selectorTop <= y <= selectorTop + selectorHeight:
-        zombies = app.zombieTypes
-        for i in range(len(zombies)):
-            ztype = zombies[i]
+    if (selectorLeft <= x <= selectorLeft + selectorWidth) and (selectorTop <= y <= selectorTop + selectorHeight):
+        for i, ztype in enumerate(app.zombieTypes):
             zombieX = selectorLeft + 50 + i * 120
             zombieY = selectorTop + 20
-            if (zombieX - 25 <= x <= zombieX + 25 and 
-                zombieY - 25 <= y <= zombieY + 25):
+            if (zombieX - 25 <= x <= zombieX + 25) and (zombieY - 25 <= y <= zombieY + 25):
                 app.zombieType = ztype
                 return
         return
@@ -332,21 +338,10 @@ def onMousePressGame(app, x, y):
     if app.paused:
         return
     
-    mageX = app.mage.x
-    mageY = app.mage.y
-    if abs(x - mageX) < 40 and abs(y - mageY) < 40:
-        ztype = app.zombieType
-        zcost = app.zombieCost.get(ztype, 50)
-        if app.zombiePoints >= zcost:
-            zombie = Zombie(mageX, mageY, app.mage.row, ztype)
-            app.zombies.append(zombie)
-            app.zombiePoints -=  zcost
-        return
-    
     rightColX = app.boardLeft + app.boardWidth
     if x > rightColX and app.boardTop <= y < app.boardTop + app.boardHeight:
         row = int((y - app.boardTop) // app.cellHeight)
-        col = app.cols - 1
+        col = app.cols + 1
         if 0 <= row < app.rows:
             ztype = app.zombieType
             zcost = app.zombieCost.get(ztype, 100)
@@ -358,70 +353,95 @@ def onMousePressGame(app, x, y):
                 app.zombiePoints -=  zcost
 
 def onKeyPress(app, key):
-    if key == 'r' or key == 'R':
-        app.mode = 'menu'
-        resetGame(app)
-    if key == 'p' or key == 'P':
-        app.paused = not app.paused
-    if key == 's' or key == 'S':
-        app.showGrid = not app.showGrid
-    if key == 'h' or key == 'H':
-        app.showHealth = not app.showHealth
-    if key == 'left':
-        currentIndex = app.zombieTypes.index(app.zombieType)
-        app.zombieType = app.zombieTypes[(currentIndex - 1) % len(app.zombieTypes)]
-    elif key == 'right':
-        currentIndex = app.zombieTypes.index(app.zombieType)
-        app.zombieType = app.zombieTypes[(currentIndex + 1) % len(app.zombieTypes)]
-    elif key == 'up':
-        app.mage.targetY -=  app.cellHeight
-        if app.mage.targetY < app.boardTop + app.cellHeight // 2:
-            app.mage.targetY = app.boardTop + app.cellHeight // 2
-    elif key == 'down':
-        app.mage.targetY +=  app.cellHeight
-        if app.mage.targetY > app.boardTop + app.boardHeight - app.cellHeight // 2:
-            app.mage.targetY = app.boardTop + app.boardHeight - app.cellHeight // 2
-    elif key == 'enter':
-        ztype = app.zombieType
-        zcost = app.zombieCost.get(ztype, 100)
-        if app.zombiePoints >= zcost:
-            app.mage.summoning = True
-            app.mage.summonTimer = 0
-            zombie = Zombie(app.mage.x, app.mage.y, app.mage.row, ztype)
-            app.zombies.append(zombie)
-            app.zombiePoints -=  zcost
+    if app.commandMode:
+        if key == 'escape':
+            app.commandMode = False
+            app.commandString = ""
+        elif key == 'tab':
+            if app.commandString.startswith("summon-"):
+                com = app.commandString.split("-")
+                if len(com) == 2:
+                    currentType = com[1]
+                    types = ['sunflower', 'peashooter', 'wallnut', 'repeater', 'snowPeaShooter', 'potato', 'zombie', 'giantZombie', 'doorZombie']
+                    if currentType in types:
+                        currentIndex = types.index(currentType)
+                        nextIndex = (currentIndex + 1) % len(types)
+                    else:
+                        nextIndex = 0
+                    app.commandString = f"summon-{types[nextIndex]}"
+        elif key == 'backspace':
+            if app.commandString:
+                app.commandString = app.commandString[:-1]
+        elif key == 'enter':
+            executeCommand(app, app.commandString)
+            app.commandMode = False
+            app.commandString = ""
+        elif len(key) == 1:
+            app.commandString += key
+        
+    else:
+        if key == '/':
+            app.commandMode = True
+            app.commandString = ""
+        elif key == 'r' or key == 'R':
+            app.mode = 'menu'
+            resetGame(app)
+        elif key == 'p' or key == 'P':
+            app.paused = not app.paused
+        elif key == 's' or key == 'S':
+            app.showGrid = not app.showGrid
+        elif key == 'h' or key == 'H':
+            app.showHealth = not app.showHealth
+        elif key == 'left':
+            currentIndex = app.zombieTypes.index(app.zombieType)
+            app.zombieType = app.zombieTypes[(currentIndex - 1) % len(app.zombieTypes)]
+        elif key == 'right':
+            currentIndex = app.zombieTypes.index(app.zombieType)
+            app.zombieType = app.zombieTypes[(currentIndex + 1) % len(app.zombieTypes)]
+        elif key == 'up':
+            app.mage.targetY -=  app.cellHeight
+            if app.mage.targetY < app.boardTop + app.cellHeight // 2:
+                app.mage.targetY = app.boardTop + app.cellHeight // 2
+        elif key == 'down':
+            app.mage.targetY +=  app.cellHeight
+            if app.mage.targetY > app.boardTop + app.boardHeight - app.cellHeight // 2:
+                app.mage.targetY = app.boardTop + app.boardHeight - app.cellHeight // 2
+        elif key == 'enter':
+            ztype = app.zombieType
+            zcost = app.zombieCost.get(ztype, 100)
+            if app.zombiePoints >= zcost:
+                app.mage.summoning = True
+                app.mage.summonTimer = 0
+                zombie = Zombie(app.mage.x, app.mage.y, app.mage.row, ztype)
+                app.zombies.append(zombie)
+                app.zombiePoints -=  zcost
 
 def spawnPlant(app):
     emptyPs = [(row, col) for row in range(app.rows) for col in range(app.cols) if app.board[row][col] is None]
     
     if emptyPs:
-        plantTypes = {'sunflower': 0.25,'peashooter': 0.2, 'wallnut': 0.3, 'repeater': 0.15, 'snowPeaShooter': 0.1}
-        #plantTypes = {'sunflower': 0,'peashooter': 0, 'wallnut': 0, 'repeater': 0, 'snowPeaShooter': 1}
-        #from https://blog.csdn.net/qq_44810930/article/details/139437577
+        plantTypes = {'sunflower': 0.25,'peashooter': 0.2, 'wallnut': 0.2, 'repeater': 0.1, 'snowPeaShooter': 0.15, 'potato': 0.1}
+        #plantTypes = {'potato': 1}
+        #plantTypes = {'repeater': 1}
+        #plantTypes = {'snowPeaShooter': 1}
+
+        #function idea from https://blog.csdn.net/qq_44810930/article/details/139437577
         selectedPlantType = random.choices(list(plantTypes.keys()), weights = list(plantTypes.values()))[0]
-        print(selectedPlantType)
-        
+        #print(selectedPlantType)
         if selectedPlantType == 'sunflower':
             validPs = [(row, col) for (row, col) in emptyPs if col in (0, 1)]
             if validPs:
-                # from https://blog.csdn.net/qq_44810930/article/details/139437577
                 row, col = random.choice(validPs)
                 newPlant = Plant(row, col, selectedPlantType)
                 app.board[row][col] = newPlant
-                
         elif selectedPlantType == 'wallnut':
             validPs = []
-            #fix
             for row, col in emptyPs:
-                hasPlantBehind = False
-                for checkCol in range(col - 1, 0, -1):
+                for checkCol in range(col - 1, -1, -1):
                     plantBehind = app.board[row][checkCol]
-                    if plantBehind is not None and plantBehind.type != 'wallnut':
-                        hasPlantBehind = True
+                    if plantBehind and plantBehind.type != 'wallnut':
+                        validPs.append((row, col))
                         break
-                if hasPlantBehind:
-                    validPs.append((row, col))
-            
             if validPs:
                 # from https://blog.csdn.net/qq_44810930/article/details/139437577
                 row, col = random.choice(validPs)
@@ -468,6 +488,7 @@ def onStep(app):
     app.plantIndex['wallnut'] = (app.plantIndex['wallnut'] + 1) % 44
     app.plantIndex['repeater'] = (app.plantIndex['repeater'] + 1) % 49
     app.plantIndex['snowPeaShooter'] = (app.plantIndex['snowPeaShooter'] + 1) % 25
+    app.plantIndex['potato'] = (app.plantIndex['potato'] + 1) % 29
     #zombieIndex   
     app.zombieIndex['zombie']['walking'] = (app.zombieIndex['zombie']['walking'] + 1) % 46
     app.zombieIndex['zombie']['eating'] = (app.zombieIndex['zombie']['eating'] + 1) % 40
@@ -485,11 +506,11 @@ def onStep(app):
     checkGameState(app)
 
 def updateGame(app):
-    for bullet in app.bullets[:]:
+    for bullet in app.bullets.copy():
         bullet['x'] +=  4
         if bullet['x'] > app.boardLeft + app.boardWidth + 60:
             app.bullets.remove(bullet)
-    for zombie in app.zombies[:]:
+    for zombie in app.zombies.copy():
         if zombie.slowed:
             zombie.slowTimer -=  1
             if zombie.slowTimer <= 0:
@@ -500,7 +521,7 @@ def updateGame(app):
                     zombie.speed = 0.5
                 elif zombie.type == 'doorZombie':
                     zombie.speed = 0.6
-                print(f"Slow ended, speed:{zombie.speed}")
+                #print(f"Slow ended, speed:{zombie.speed}")
         
         zombie.x -=  zombie.speed
         if zombie.x < app.boardLeft - 60:
@@ -519,13 +540,13 @@ def updateGame(app):
                     break
 
 def checkCollisions(app):
-    for bullet in app.bullets[:]:
-        for zombie in app.zombies[:]:
+    for bullet in app.bullets.copy():
+        for zombie in app.zombies.copy():
             if (abs(bullet['x'] - zombie.x) < 25 and abs(bullet['y'] - zombie.y) < 35):
                 zombie.health -=  bullet['damage']
                 
                 if bullet.get('type') == 'snow' and not zombie.slowed:
-                    print(f"before: {zombie.speed}")
+                    #print(f"before: {zombie.speed}")
                     zombie.slowed = True
                     zombie.slowTimer = 180  
                     if zombie.type == 'zombie':
@@ -534,14 +555,15 @@ def checkCollisions(app):
                         zombie.speed = 0.25
                     elif zombie.type == 'doorZombie':
                         zombie.speed = 0.3 
-                    print(f"after: {zombie.speed}") 
+                    #print(f"after: {zombie.speed}") 
                 
                 if bullet in app.bullets:
                     app.bullets.remove(bullet)
                 if zombie.health <= 0:
                     app.zombies.remove(zombie)
                 break
-    for zombie in app.zombies[:]:
+
+    for zombie in app.zombies.copy():
         attacked = False
         for row in range(app.rows):
             for col in range(app.cols):
@@ -556,9 +578,17 @@ def checkCollisions(app):
                         if plant.health <= 0:
                             app.board[row][col] = None
                             app.zombiePoints +=  120
-                        break
-            if attacked:
-                break
+                        if plant.type == 'potato':
+                            zombiesToRemove = []
+                            x = app.boardLeft + col * app.cellWidth + app.cellWidth // 2
+                            for z in app.zombies:
+                                if z.row == row and abs(z.x - x) < 60:
+                                    zombiesToRemove.append(z)
+                            for z in zombiesToRemove:
+                                app.zombies.remove(z)
+                            app.board[row][col] = None
+                            break
+
         if not attacked:
             if zombie.type == 'zombie':
                 if not zombie.slowed:
@@ -585,7 +615,7 @@ def plantAttack(app):
                                 'x': bulletX,
                                 'y': bulletY,
                                 'row': row,
-                                'damage': 25,
+                                'damage': 20,
                                 'type': 'normal'
                             })
                         elif plant.type == 'repeater':
@@ -593,14 +623,14 @@ def plantAttack(app):
                                 'x': bulletX,
                                 'y': bulletY,
                                 'row': row,
-                                'damage': 25,
+                                'damage': 15,
                                 'type': 'normal'
                             })
                             app.bullets.append({
                                 'x': bulletX + 10,
                                 'y': bulletY,
                                 'row': row,
-                                'damage': 25,
+                                'damage': 15,
                                 'type': 'normal'
                             })
                         elif plant.type == 'snowPeaShooter':
@@ -608,7 +638,7 @@ def plantAttack(app):
                                 'x': bulletX,
                                 'y': bulletY,
                                 'row': row,
-                                'damage': 25,
+                                'damage': 18,
                                 'type': 'snow'
                             })
                         break
@@ -628,7 +658,7 @@ def resetGame(app):
     app.gameOver = False
     app.gameWon = False
     app.paused = False
-    app.zombiePoints = 1500
+    app.zombiePoints = 2000
     app.board = [[None] * app.cols for _ in range(app.rows)]
     app.bullets = []
     app.zombies = []
@@ -639,7 +669,8 @@ def resetGame(app):
         'peashooter': 0,
         'wallnut': 0,
         'repeater': 0,
-        'snowPeaShooter': 0
+        'snowPeaShooter': 0,
+        'potato': 0
     }
     app.zombieIndex = {
         'zombie': {'walking': 0, 'eating': 0},
@@ -649,6 +680,34 @@ def resetGame(app):
     app.mowers = [Mower(app, r) for r in range(app.rows)]
     app.mage = Mage()
 
+def executeCommand(app, command):
+    if command.startswith("summon-"):
+        com = command.split("-")
+        if len(com) == 4:
+            _, type, row, col = com
+            row = int(row)
+            col = int(col)
+            if type in app.plantImages:
+                if 0 <= row < app.rows and 0 <= col < app.cols:
+                    plant = Plant(row, col, type)
+                    app.board[row][col] = plant
+            elif type in app.zombieTypes:
+                if 0 <= row < app.rows:
+                    x = app.boardLeft + col * app.cellWidth + app.cellWidth // 2
+                    y = app.boardTop + row * app.cellHeight + app.cellHeight // 2
+                    zombie = Zombie(x, y, row, type)
+                    app.zombies.append(zombie)
+    elif command == "clear":
+        app.board = [[None] * app.cols for _ in range(app.rows)]
+        app.zombies = []
+    elif command == "help":
+        print("""
+        /summon-<type>-<row>-<col> (type: sunflower, peashooter, wallnut, repeater, snowPeaShooter, potato, zombie, giantZombie, doorZombie)
+        /clear (clear all plants and zombies)
+        /help (show this help)
+        /tab (cycle through plant and zombie types)
+        """)
+                    
 def main():
     runApp(width = 900, height = 650)
 
