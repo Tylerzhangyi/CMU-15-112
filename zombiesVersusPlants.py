@@ -455,7 +455,7 @@ def spawnPlant(app):
             app.board[row][col] = newPlant
 
 def onStep(app):
-    if app.paused or app.gameOver:
+    if app.mode != 'game' or app.paused or app.gameOver:
         return
     app.mage.timer +=  1
     if app.mage.timer >= app.mage.speed:
